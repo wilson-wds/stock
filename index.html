@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>極速當沖風險計算機</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0B0E14',
+                        panel: '#151924',
+                        primary: '#2962FF',
+                        danger: '#F23645',
+                        success: '#089981',
+                        textMain: '#D1D4DC',
+                        textMuted: '#787B86'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        body {
+            background-color: #0B0E14;
+            color: #D1D4DC;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro TC", "Microsoft JhengHei", sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .gradient-border {
+            position: relative;
+            background: #151924;
+            background-clip: padding-box;
+            border: 1px solid transparent;
+            border-radius: 1.5rem;
+        }
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            z-index: -1;
+            margin: -1px;
+            border-radius: inherit;
+            background: linear-gradient(to bottom right, #2962FF, #151924, #151924);
+        }
+        /* 自訂捲軸樣式，讓表格捲動時更美觀 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(30, 34, 45, 0.5); 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #4B5563; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #6B7280; 
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-8 px-4">
+
+    <div class="w-full max-w-md gradient-border p-6 shadow-2xl mb-6">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-xl font-bold text-white tracking-wider">⚡ 當沖風險計算機</h1>
+            <span class="text-xs text-textMuted border border-textMuted/30 px-2 py-1 rounded-full">Pro</span>
+        </div>
+
+        <div class="space-y-5">
+            <!-- 多空切換 -->
+            <div class="flex bg-[#1E222D] rounded-xl p-1">
+                <button id="btnLong" onclick="setDirection('long')" class="flex-1 py-2 text-sm font-bold rounded-lg bg-danger text-white transition-all">做多 (先買)</button>
+                <button id="btnShort" onclick="setDirection('short')" class="flex-1 py-2 text-sm font-bold rounded-lg text-textMuted hover:text-white transition-all">做空 (先賣)</button>
+            </div>
+            
+            <!-- 買進/賣出價 -->
+            <div>
+                <label id="priceLabel" class="block text-sm font-medium text-textMuted mb-1">進場價位 (Price)</label>
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-textMuted font-medium">$</span>
+                    <input type="number" id="entryPrice" value="100" inputmode="decimal"
+                        class="w-full bg-[#1E222D] border border-gray-700 rounded-xl py-3 pl-8 pr-4 text-white font-semibold text-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                        oninput="calculate()">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-textMuted mb-1">停損比例 (%)</label>
+                    <div class="relative">
+                        <input type="number" id="stopLoss" value="2.0" step="0.1" inputmode="decimal"
+                            class="w-full bg-[#1E222D] border border-gray-700 rounded-xl py-3 px-4 text-white font-semibold text-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                            oninput="calculate()">
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="setStopLoss(1)" class="flex-1 text-xs py-1 rounded bg-[#2A2E39] hover:bg-gray-600 transition-colors">1%</button>
+                        <button onclick="setStopLoss(2)" class="flex-1 text-xs py-1 rounded bg-[#2A2E39] hover:bg-gray-600 transition-colors">2%</button>
+                        <button onclick="setStopLoss(3)" class="flex-1 text-xs py-1 rounded bg-[#2A2E39] hover:bg-gray-600 transition-colors">3%</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-textMuted mb-1" title="願意承擔1元風險，換取多少潛在獲利">期望風報比 ⓘ</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted font-medium">1 :</span>
+                        <input type="number" id="rewardRatio" value="2.0" step="0.5" inputmode="decimal"
+                            class="w-full bg-[#1E222D] border border-gray-700 rounded-xl py-3 pl-9 pr-2 text-white font-semibold text-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                            oninput="calculate()">
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="setRatio(1.5)" class="flex-1 text-xs py-1 rounded bg-[#2A2E39] hover:bg-gray-600 transition-colors">1.5</button>
+                        <button onclick="setRatio(2.0)" class="flex-1 text-xs py-1 rounded bg-[#2A2E39] hover:bg-gray-600 transition-colors">2.0</button>
+                        <button onclick="setRatio(3.0)" class="flex-1 text-xs py-1 rounded bg-[#2A2E39] hover:bg-gray-600 transition-colors">3.0</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-textMuted mb-1">交易張數 (Lots)</label>
+                    <div class="relative">
+                        <input type="number" id="lots" value="1" inputmode="numeric"
+                            class="w-full bg-[#1E222D] border border-gray-700 rounded-xl py-3 pr-8 pl-4 text-white font-semibold text-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                            oninput="calculate()">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-textMuted font-medium">張</span>
+                    </div>
+                </div>
+                
+                <div>
+                     <label class="block text-sm font-medium text-textMuted mb-1">券商折讓</label>
+                     <select id="feeDiscount" onchange="calculate()" class="w-full bg-[#1E222D] border border-gray-700 rounded-xl py-3 px-2 text-white text-sm focus:outline-none focus:border-primary">
+                         <!-- 預設國泰 2.8 折 -->
+                         <option value="0.28" selected>國泰 2.8折</option>
+                         <option value="1.0">無折讓 (10折)</option>
+                         <option value="0.6">一般 6折</option>
+                         <option value="0.5">一般 5折</option>
+                         <option value="0.38">大戶 3.8折</option>
+                         <option value="0.1">極致 1折</option>
+                     </select>
+                </div>
+            </div>
+        </div>
+
+        <hr class="border-gray-800 my-6">
+
+        <div class="space-y-4">
+            <!-- 損益兩平 Tick 提示 -->
+            <div class="bg-primary/10 border border-primary/30 rounded-xl p-3 flex justify-between items-center">
+                <div class="flex flex-col">
+                    <span class="text-primary font-medium text-sm">損益兩平需跳動</span>
+                    <span class="text-textMuted text-xs mt-1">超過此 Tick 數才開始獲利</span>
+                </div>
+                <div class="text-right">
+                    <span id="outBreakevenTicks" class="text-2xl font-bold text-primary">0</span>
+                    <span class="text-primary text-sm"> Ticks</span>
+                </div>
+            </div>
+
+            <!-- 停損與停利 -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-danger/10 border border-danger/20 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-danger"></div>
+                    <span class="text-danger text-sm font-medium mb-1">嚴格停損價</span>
+                    <span id="outStopPrice" class="text-2xl font-bold text-white">0.00</span>
+                </div>
+                <div class="bg-success/10 border border-success/20 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-success"></div>
+                    <span class="text-success text-sm font-medium mb-1">目標停利價</span>
+                    <span id="outTargetPrice" class="text-2xl font-bold text-white">0.00</span>
+                </div>
+            </div>
+
+            <!-- 資金與風險 -->
+            <div class="bg-[#1E222D] rounded-xl p-4 flex justify-between items-center">
+                <span class="text-textMuted text-sm">部位總金額</span>
+                <span id="outTotalCapital" class="text-lg font-medium text-white">$0</span>
+            </div>
+            <div class="bg-danger/20 border border-danger/30 rounded-xl p-4 flex justify-between items-center">
+                <span class="text-danger font-medium text-sm">此單最大風險 (含稅費)</span>
+                <span id="outMaxRisk" class="text-xl font-bold text-danger">-$0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增：±10% 全 Tick 實際損益表 -->
+    <div class="w-full max-w-md gradient-border p-5 shadow-2xl mb-6">
+        <div class="mb-4 text-center">
+            <h2 class="text-lg font-bold text-white tracking-wider flex items-center justify-center gap-2">
+                📊 ±10% 全 Tick 實際損益表
+            </h2>
+            <span class="text-xs text-textMuted">(已扣除稅費，由高至低排列)</span>
+        </div>
+        
+        <!-- 使用 max-h 控制高度並允許 Y 軸捲動 -->
+        <div id="tableContainer" class="overflow-y-auto max-h-[350px] custom-scrollbar relative pr-1 scroll-smooth">
+            <table class="w-full text-sm text-center relative">
+                <!-- sticky top-0 讓標題固定在頂部不隨內容捲動 -->
+                <thead class="sticky top-0 bg-[#151924] z-10 shadow-md">
+                    <tr class="text-textMuted border-b border-gray-800">
+                        <th class="py-2 font-medium bg-[#151924]">跳動 Ticks</th>
+                        <th class="py-2 font-medium bg-[#151924]">對應股價</th>
+                        <th class="py-2 font-medium bg-[#151924]">實際淨損益</th>
+                    </tr>
+                </thead>
+                <tbody id="pnlTableBody" class="divide-y divide-gray-800/50">
+                    <!-- 表格內容將由 JavaScript 動態生成 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="mb-8 text-center text-textMuted text-xs">
+        Designed for disciplined traders. Keep your losses small.
+    </div>
+
+    <script>
+        // 狀態管理
+        let tradeDirection = 'long';
+
+        // 切換多空
+        function setDirection(dir) {
+            tradeDirection = dir;
+            const btnLong = document.getElementById('btnLong');
+            const btnShort = document.getElementById('btnShort');
+            const priceLabel = document.getElementById('priceLabel');
+
+            if (dir === 'long') {
+                btnLong.className = "flex-1 py-2 text-sm font-bold rounded-lg bg-danger text-white transition-all";
+                btnShort.className = "flex-1 py-2 text-sm font-bold rounded-lg text-textMuted hover:text-white transition-all";
+                priceLabel.innerText = "做多進場價 (先買)";
+            } else {
+                btnLong.className = "flex-1 py-2 text-sm font-bold rounded-lg text-textMuted hover:text-white transition-all";
+                btnShort.className = "flex-1 py-2 text-sm font-bold rounded-lg bg-success text-white transition-all";
+                priceLabel.innerText = "做空進場價 (先賣)";
+            }
+            calculate();
+        }
+
+        // 數字格式化
+        const formatNumber = (num) => {
+            if (isNaN(num)) return '0';
+            return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(num);
+        };
+
+        // 台股 Tick Size
+        function getTickSize(price) {
+            if (price < 10) return 0.01;
+            if (price < 50) return 0.05;
+            if (price < 100) return 0.1;
+            if (price < 500) return 0.5;
+            if (price < 1000) return 1;
+            return 5;
+        }
+
+        function roundToNearestTick(price) {
+            if (price <= 0) return 0;
+            const tick = getTickSize(price);
+            const rounded = Math.round(price / tick) * tick;
+            return parseFloat(rounded.toFixed(2));
+        }
+
+        function getPriceByTicks(startPrice, ticks, direction) {
+            let currentPrice = startPrice;
+            let remainingTicks = Math.abs(ticks);
+            const sign = direction === 'up' ? 1 : -1;
+
+            while (remainingTicks > 0) {
+                let currentTickSize = getTickSize(currentPrice);
+                // 處理跨區間向下跳動的 tick 大小判定
+                if (direction === 'down' && [10, 50, 100, 500, 1000].includes(currentPrice)) {
+                    currentTickSize = getTickSize(currentPrice - 0.01); 
+                }
+                currentPrice += sign * currentTickSize;
+                currentPrice = parseFloat(currentPrice.toFixed(2));
+                remainingTicks--;
+            }
+            return currentPrice;
+        }
+
+        function setStopLoss(value) { document.getElementById('stopLoss').value = value; calculate(); }
+        function setRatio(value) { document.getElementById('rewardRatio').value = value; calculate(); }
+
+        // 計算特定出場價的「稅後淨損益」
+        function calculateNetPnL(entryPrice, exitPrice, shares, feeDiscount, direction) {
+            const feeRate = 0.001425;
+            const taxRate = 0.0015; // 當沖降稅
+
+            const entryCapital = entryPrice * shares;
+            const exitCapital = exitPrice * shares;
+
+            // 進場手續費 (低消 20)
+            const entryFeeRaw = Math.floor(entryCapital * feeRate * feeDiscount);
+            const entryFee = entryFeeRaw < 20 ? 20 : entryFeeRaw;
+
+            // 出場手續費 (低消 20)
+            const exitFeeRaw = Math.floor(exitCapital * feeRate * feeDiscount);
+            const exitFee = exitFeeRaw < 20 ? 20 : exitFeeRaw;
+
+            // 證交稅 (賣出時收取，計算時以賣出價為準)
+            const taxPrice = direction === 'long' ? exitPrice : entryPrice;
+            const tax = Math.floor(taxPrice * shares * taxRate);
+
+            const totalCosts = entryFee + exitFee + tax;
+            
+            let rawProfit;
+            if (direction === 'long') {
+                rawProfit = exitCapital - entryCapital;
+            } else {
+                rawProfit = entryCapital - exitCapital;
+            }
+
+            return rawProfit - totalCosts;
+        }
+
+        function calculate() {
+            const entryPrice = parseFloat(document.getElementById('entryPrice').value) || 0;
+            const stopLossPct = parseFloat(document.getElementById('stopLoss').value) || 0;
+            const rewardRatio = parseFloat(document.getElementById('rewardRatio').value) || 0;
+            const lots = parseFloat(document.getElementById('lots').value) || 0;
+            const feeDiscount = parseFloat(document.getElementById('feeDiscount').value) || 1;
+            
+            const shares = lots * 1000;
+            if (entryPrice <= 0 || shares <= 0) {
+                 document.getElementById('pnlTableBody').innerHTML = '';
+                 return;
+            }
+
+            const stopLossAmount = entryPrice * (stopLossPct / 100);
+            
+            let rawStopPrice, rawTargetPrice;
+            if (tradeDirection === 'long') {
+                rawStopPrice = entryPrice - stopLossAmount;
+                rawTargetPrice = entryPrice + (stopLossAmount * rewardRatio);
+            } else {
+                rawStopPrice = entryPrice + stopLossAmount;
+                rawTargetPrice = entryPrice - (stopLossAmount * rewardRatio);
+            }
+            
+            const stopPrice = roundToNearestTick(rawStopPrice);
+            const targetPrice = roundToNearestTick(rawTargetPrice);
+            const totalCapital = entryPrice * shares;
+
+            // 計算最大風險 (使用共用函式計算停損價的淨損益，然後取絕對值)
+            const netPnLAtStop = calculateNetPnL(entryPrice, stopPrice, shares, feeDiscount, tradeDirection);
+            // 風險一定是負數，為了顯示為金額我們取絕對值
+            const maxRisk = Math.abs(netPnLAtStop);
+
+            // 計算損益兩平 Ticks
+            let requiredTicks = 0;
+            let currentSimPrice = entryPrice;
+            let netProfit = -999999;
+            
+            // 暴力推算
+            while (netProfit <= 0 && requiredTicks < 100) {
+                requiredTicks++;
+                const simDirection = tradeDirection === 'long' ? 'up' : 'down';
+                currentSimPrice = getPriceByTicks(entryPrice, requiredTicks, simDirection);
+                netProfit = calculateNetPnL(entryPrice, currentSimPrice, shares, feeDiscount, tradeDirection);
+            }
+
+            // 更新畫面上方區塊
+            document.getElementById('outStopPrice').innerText = formatNumber(stopPrice);
+            document.getElementById('outTargetPrice').innerText = formatNumber(targetPrice);
+            document.getElementById('outTotalCapital').innerText = '$' + formatNumber(totalCapital);
+            document.getElementById('outMaxRisk').innerText = '-$' + formatNumber(maxRisk);
+            
+            const tickElement = document.getElementById('outBreakevenTicks');
+            if (requiredTicks >= 100) {
+                tickElement.innerText = "100+";
+            } else {
+                tickElement.innerText = requiredTicks;
+            }
+
+            // --------------------------------------------------------
+            // 產生 ±10% 全 Tick 損益試算表
+            // --------------------------------------------------------
+            const pnlTableBody = document.getElementById('pnlTableBody');
+            let tableHTML = '';
+            
+            const maxPriceLimit = entryPrice * 1.1; // 概算漲停價
+            const minPriceLimit = entryPrice * 0.9; // 概算跌停價
+            
+            let upTicks = [];
+            let downTicks = [];
+            
+            // 產生往上跳動的 Ticks (最高 10%)
+            let currentSimTickPrice = entryPrice;
+            let tickCount = 0;
+            while(currentSimTickPrice < maxPriceLimit) {
+                tickCount++;
+                currentSimTickPrice = getPriceByTicks(entryPrice, tickCount, 'up');
+                if (currentSimTickPrice > maxPriceLimit) break;
+                upTicks.push({ price: currentSimTickPrice, ticks: tickCount });
+            }
+            
+            // 產生往下跳動的 Ticks (最低 10%)
+            currentSimTickPrice = entryPrice;
+            tickCount = 0;
+            while(currentSimTickPrice > minPriceLimit && currentSimTickPrice > 0) {
+                tickCount++;
+                currentSimTickPrice = getPriceByTicks(entryPrice, tickCount, 'down');
+                if (currentSimTickPrice < minPriceLimit) break;
+                downTicks.push({ price: currentSimTickPrice, ticks: -tickCount });
+            }
+            
+            // 讓價格由高排到低：將上漲的 Ticks 陣列反轉
+            upTicks.reverse();
+            
+            // 組合完整陣列：上漲 Ticks -> 進場價 (0 tick) -> 下跌 Ticks
+            const allTicks = [
+                ...upTicks,
+                { price: entryPrice, ticks: 0 },
+                ...downTicks
+            ];
+            
+            allTicks.forEach(item => {
+                const exitPrice = item.price;
+                const netPnL = calculateNetPnL(entryPrice, exitPrice, shares, feeDiscount, tradeDirection);
+                
+                // 設定顏色與顯示符號
+                let pnlColor = 'text-textMuted';
+                let pnlSign = '';
+                let rowBgClass = 'hover:bg-white/5';
+                let tickLabel = '';
+
+                if (netPnL > 0) {
+                    pnlColor = 'text-success font-bold';
+                    pnlSign = '+';
+                } else if (netPnL < 0) {
+                    pnlColor = 'text-danger font-bold';
+                }
+
+                // 標示與顏色邏輯
+                if (item.ticks > 0) {
+                    tickLabel = `+${item.ticks}`;
+                } else if (item.ticks < 0) {
+                    tickLabel = `${item.ticks}`;
+                } else {
+                    tickLabel = `進場價`;
+                    rowBgClass = 'bg-primary/20 hover:bg-primary/30'; // 進場價特別標示
+                    pnlColor = 'text-white font-medium';
+                    pnlSign = '';
+                }
+
+                tableHTML += `
+                    <tr ${item.ticks === 0 ? 'id="entryRow"' : ''} class="${rowBgClass} transition-colors">
+                        <td class="py-2.5 text-textMuted">${tickLabel}</td>
+                        <td class="py-2.5 text-white font-medium">${formatNumber(exitPrice)}</td>
+                        <td class="py-2.5 ${pnlColor}">${pnlSign}$${formatNumber(netPnL)}</td>
+                    </tr>
+                `;
+            });
+            
+            pnlTableBody.innerHTML = tableHTML;
+
+            // 自動將捲軸置中於「進場價」，方便使用者直接查看最接近的 Ticks
+            setTimeout(() => {
+                const entryRow = document.getElementById('entryRow');
+                const container = document.getElementById('tableContainer');
+                if (entryRow && container) {
+                    // 計算置中高度並捲動
+                    container.scrollTop = entryRow.offsetTop - (container.clientHeight / 2) + (entryRow.clientHeight / 2);
+                }
+            }, 10);
+        }
+
+        window.onload = () => {
+            calculate();
+        };
+    </script>
+</body>
+</html>
